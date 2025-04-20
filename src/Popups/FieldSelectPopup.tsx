@@ -13,6 +13,8 @@ type ServerPreferencesPopupProps = {
     visible: boolean;
     /** An array of all available fields. */
     allFields: Array<string>;
+    /** A value indicating whether a new fields can be added. */
+    addNew: boolean;
     /** A callback function to be called when the popup is closed. */
     onClose: (accept: boolean, fields?: Array<string>) => void;
 };
@@ -26,6 +28,7 @@ let FieldSelectPopup = ({
     className, //
     visible,
     allFields,
+    addNew,
     onClose,
 }: ServerPreferencesPopupProps) => {
     const [fields, setFields] = React.useState<Array<string>>([]);
@@ -43,7 +46,8 @@ let FieldSelectPopup = ({
     }, [onClose]);
 
     const selectChange = React.useCallback((value: string[]) => {
-        setFields(value);
+        const newValue = value.map(f => f.toLowerCase());
+        setFields(newValue);
     }, []);
 
     const selectOptions = React.useMemo(() => {
@@ -80,7 +84,7 @@ let FieldSelectPopup = ({
                             <td>
                                 <Select //
                                     value={fields}
-                                    mode="tags"
+                                    mode={addNew ? "tags" : "multiple"}
                                     onChange={selectChange}
                                     className="Select-width"
                                 >
