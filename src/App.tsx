@@ -1,17 +1,19 @@
 import * as React from "react";
 import "./App.css";
-import { faMoon, faSun } from "@fortawesome/free-regular-svg-icons";
-import { faDownload } from "@fortawesome/free-solid-svg-icons";
+import { faEdit, faFile, faMoon, faSun } from "@fortawesome/free-regular-svg-icons";
+import { faDownload, faPlus } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { Button, Input, Switch, Table } from "antd";
+import { Button, Input, Switch, Table, Tooltip } from "antd";
+import type { Key } from "antd/es/table/interface";
 import classNames from "classnames";
 import Fuse from "fuse.js";
 import styled from "styled-components";
 import { DragDropOpenFileAreaButton } from "./Components/DragDropOpenFileArea.tsx";
-import { FieldSelectPopup } from "./Components/FieldSelectPopup.tsx";
 import { useAntdTheme, useAntdToken } from "./Context/AntdThemeContext.tsx";
 import { useNotify } from "./Hooks/Notify.ts";
 import { useDynamicDownload } from "./Hooks/UseDynamicDownload.ts";
+import { AddEditRowDataPopup } from "./Popups/AddEditRowDataPopup.tsx";
+import { FieldSelectPopup } from "./Popups/FieldSelectPopup.tsx";
 import { PwaBadge } from "./PwaBadge.tsx";
 import type { BaseProps, DictionaryEntry } from "./Types/BaseTypes.ts";
 import { getArrayFields } from "./Utilities/ArrayUtils.ts";
@@ -20,22 +22,36 @@ import { useLocalStorage } from "./Utilities/UseLocalStorage.tsx";
 type Props = {} & BaseProps;
 
 let App = ({ className }: Props) => {
+    // Local storage
     const [setItem, , getItem] = useLocalStorage();
 
-    const [dataSource, setDataSource] = React.useState<DictionaryEntry[]>();
+    // Antd theme selection design token
     const { token } = useAntdToken();
+
+    // Pure state
+    const [dataSource, setDataSource] = React.useState<DictionaryEntry[]>();
     const { setTheme, updateBackground } = useAntdTheme();
+    const [selectKeysVisible, setSelectKeysVisible] = React.useState(false);
+    const [scrollHeight, setScrollHeight] = React.useState(0);
+    const [addNew, setAddNew] = React.useState(false);
+    const [addOrEditEntryVisible, setAddOrEditEntryVisible] = React.useState(false);
+    const [editAddEntry, setEditAddEntry] = React.useState<DictionaryEntry | undefined>(undefined);
+    const [editEntryNewMode, setEditEntryNewMode] = React.useState(true);
+    const [selectedRowKeys, setSelectedRowKeys] = React.useState<Array<Key>>([]);
+
+    // Persistent state
     const [keys, setKeys] = React.useState<Array<string>>(getItem<Array<string>>("keys", []));
     const [darkMode, setDarkMode] = React.useState<boolean>(getItem<boolean>("darkMode", false));
     const [dictionary, setDictionary] = React.useState<DictionaryEntry[]>(getItem<DictionaryEntry[]>("dictionary", []));
-    const [selectKeysVisible, setSelectKeysVisible] = React.useState(false);
-    const [scrollHeight, setScrollHeight] = React.useState(0);
 
+    // Ref data not interacting with the UI
     const dictionaryTempRef = React.useRef<DictionaryEntry[] | undefined>(undefined);
     const keysTempRef = React.useRef<Array<string>>([]);
 
+    // The area where the notifications go
     const [contextHolder, notification] = useNotify();
 
+    // Download the current dictionary
     const downloadLinkClick = useDynamicDownload(dictionary);
 
     const downloadClick = React.useCallback(() => {
@@ -117,7 +133,14 @@ let App = ({ className }: Props) => {
 
     const onSelectKeysClose = React.useCallback(
         (accept: boolean, fields?: Array<string>) => {
-            if (accept && dictionaryTempRef.current) {
+            if (accept && addNew) {
+                dictionaryTempRef.current = undefined;
+                setKeys(fields ?? []);
+                setSelectKeysVisible(false);
+                setDictionary([]);
+                setItem("dictionary", []);
+                setItem("keys", fields ?? []);
+            } else if (accept && dictionaryTempRef.current) {
                 setKeys(fields ?? []);
                 setSelectKeysVisible(false);
                 setDictionary(dictionaryTempRef.current);
@@ -142,7 +165,25 @@ let App = ({ className }: Props) => {
                 setSelectKeysVisible(false);
             }
         },
-        [setItem]
+        [setItem, addNew]
+    );
+
+    const onAddEditRowDataPopupClose = React.useCallback(
+        (accept: boolean, data?: DictionaryEntry) => {
+            if (accept && data) {
+                let newDictionary = [...dictionary];
+                if (editEntryNewMode) {
+                    newDictionary.push(data);
+                } else if (editAddEntry && !editEntryNewMode) {
+                    const index = newDictionary.findIndex(f => f.id === editAddEntry.id);
+                    newDictionary[index] = data;
+                }
+                setDictionary(newDictionary);
+                setItem("dictionary", newDictionary);
+            }
+            setAddOrEditEntryVisible(false);
+        },
+        [setItem, dictionary, editAddEntry, editEntryNewMode]
     );
 
     // The Antd table scroll height must be calculated dynamically as it doesn't support max-height
@@ -166,6 +207,38 @@ let App = ({ className }: Props) => {
         };
     }, [onResize]);
 
+    const addNewClick = React.useCallback(() => {
+        setAddNew(true);
+        setSelectKeysVisible(true);
+    }, []);
+
+    const addClick = React.useCallback(() => {
+        setEditEntryNewMode(true);
+        setAddOrEditEntryVisible(true);
+    }, []);
+
+    const editClick = React.useCallback(() => {
+        if (selectedRowKeys.length > 0) {
+            const lastSelectedKey = selectedRowKeys[selectedRowKeys.length - 1];
+            setEditAddEntry(dictionary.find(item => item.id === lastSelectedKey));
+
+            setEditEntryNewMode(false);
+            setAddOrEditEntryVisible(true);
+        }
+    }, [selectedRowKeys, dictionary]);
+
+    const onSelectionChange = React.useCallback((selectedRowKeys: Array<Key>) => {
+        setSelectedRowKeys(selectedRowKeys);
+    }, []);
+
+    const rowSelection = React.useMemo(() => {
+        return {
+            onChange: onSelectionChange,
+            columnWidth: 60,
+            columnTitle: "Select",
+        };
+    }, [onSelectionChange]);
+
     return (
         <div id="App" className={classNames(className, App.name)}>
             {contextHolder}
@@ -177,10 +250,12 @@ let App = ({ className }: Props) => {
                     id="app-toolbar-search"
                     placeholder="Search"
                     onSearch={onSearch}
+                    className="App-toolbar-search"
                 />
                 <Button //
                     icon={<FontAwesomeIcon icon={faDownload} />}
                     onClick={downloadClick}
+                    className="Toolbar-button"
                 />
                 <Switch
                     className="App-toolbar-switch"
@@ -190,6 +265,36 @@ let App = ({ className }: Props) => {
                     checked={darkMode}
                     onChange={onLightDarkSwitchChangeEventHandler}
                 />
+            </div>
+            <div className="App-toolbar">
+                <Tooltip title="New dictionary">
+                    <Button //
+                        icon={<FontAwesomeIcon icon={faFile} />}
+                        onClick={addNewClick}
+                        className="Toolbar-button"
+                    >
+                        New dictionary
+                    </Button>
+                </Tooltip>
+                <Tooltip title="Add new entry">
+                    <Button //
+                        icon={<FontAwesomeIcon icon={faPlus} />}
+                        onClick={addClick}
+                        className="Toolbar-button"
+                    >
+                        Add new entry
+                    </Button>
+                </Tooltip>
+                <Tooltip title="Edit selected entry">
+                    <Button //
+                        icon={<FontAwesomeIcon icon={faEdit} />}
+                        onClick={editClick}
+                        className="Toolbar-button"
+                        disabled={selectedRowKeys.length === 0}
+                    >
+                        Edit selected entry
+                    </Button>
+                </Tooltip>
             </div>
             <div id="table-container" className="App-table-container">
                 <Table<DictionaryEntry> //
@@ -201,20 +306,32 @@ let App = ({ className }: Props) => {
                     virtual
                     scroll={{ y: scrollHeight }}
                     rowKey="id"
+                    rowSelection={rowSelection}
                 />
             </div>
             {selectKeysVisible && (
                 <FieldSelectPopup //
                     visible={selectKeysVisible}
-                    allFields={keysTempRef.current}
+                    allFields={addNew ? defaultNewFields : keysTempRef.current}
                     onClose={onSelectKeysClose}
+                    addNew={addNew}
                 />
             )}
+
+            <AddEditRowDataPopup //
+                visible={addOrEditEntryVisible}
+                currentDictionary={dictionary}
+                fields={keys}
+                onClose={onAddEditRowDataPopupClose}
+                editAddEntry={editEntryNewMode ? undefined : editAddEntry}
+            />
 
             <PwaBadge />
         </div>
     );
 };
+
+const defaultNewFields = ["name", "value"];
 
 App = styled(App)`
     display: flex;
@@ -231,6 +348,7 @@ App = styled(App)`
         display: flex;
         flex-direction: row;
         gap: 10px;
+        flex-wrap: wrap;
     }
     .App-toolbar-switch {
         align-self: center;
@@ -238,6 +356,12 @@ App = styled(App)`
     .App-table-container {
         height: 100%;
         overflow: hidden;
+    }
+    .Toolbar-button {
+        min-width: 40px;
+    }
+    .App-toolbar-search {
+        width: 300px;
     }
 `;
 
