@@ -1,0 +1,1 @@
+The data to the chat_abbreviations.json is from: https://www.webopedia.com/reference/text-abbreviations/
