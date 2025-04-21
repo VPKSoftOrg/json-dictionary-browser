@@ -13,5 +13,5 @@ A JSON data array with unique *id*, and *custom* fields
 [
     { "id": 10 , "name": "^5", "description": "High-five" },
     { "id": 11 , "name": "^URS", "description": "Up yours" },
-}
+]
 ```
