@@ -1,7 +1,7 @@
 import * as React from "react";
 import "./App.css";
 import { faEdit, faFile, faMoon, faSun } from "@fortawesome/free-regular-svg-icons";
-import { faDownload, faPlus } from "@fortawesome/free-solid-svg-icons";
+import { faDownload, faInfo, faPlus } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { Button, Input, Switch, Table, Tooltip } from "antd";
 import type { Key } from "antd/es/table/interface";
@@ -12,6 +12,7 @@ import { DragDropOpenFileAreaButton } from "./Components/DragDropOpenFileArea.ts
 import { useAntdTheme, useAntdToken } from "./Context/AntdThemeContext.tsx";
 import { useNotify } from "./Hooks/Notify.ts";
 import { useDynamicDownload } from "./Hooks/UseDynamicDownload.ts";
+import { AboutPopup } from "./Popups/AboutPopup.tsx";
 import { AddEditRowDataPopup } from "./Popups/AddEditRowDataPopup.tsx";
 import { FieldSelectPopup } from "./Popups/FieldSelectPopup.tsx";
 import { PwaBadge } from "./PwaBadge.tsx";
@@ -38,6 +39,7 @@ let App = ({ className }: Props) => {
     const [editAddEntry, setEditAddEntry] = React.useState<DictionaryEntry | undefined>(undefined);
     const [editEntryNewMode, setEditEntryNewMode] = React.useState(true);
     const [selectedRowKeys, setSelectedRowKeys] = React.useState<Array<Key>>([]);
+    const [aboutPopupVisible, setAboutPopupVisible] = React.useState(false);
 
     // Persistent state
     const [keys, setKeys] = React.useState<Array<string>>(getItem<Array<string>>("keys", []));
@@ -239,6 +241,10 @@ let App = ({ className }: Props) => {
         };
     }, [onSelectionChange]);
 
+    const showAboutClick = React.useCallback(() => {
+        setAboutPopupVisible(true);
+    }, []);
+
     return (
         <div id="App" className={classNames(className, App.name)}>
             {contextHolder}
@@ -252,11 +258,13 @@ let App = ({ className }: Props) => {
                     onSearch={onSearch}
                     className="App-toolbar-search"
                 />
-                <Button //
-                    icon={<FontAwesomeIcon icon={faDownload} />}
-                    onClick={downloadClick}
-                    className="Toolbar-button"
-                />
+                <Tooltip title="Save the dictionary">
+                    <Button //
+                        icon={<FontAwesomeIcon icon={faDownload} />}
+                        onClick={downloadClick}
+                        className="Toolbar-button"
+                    />
+                </Tooltip>
                 <Switch
                     className="App-toolbar-switch"
                     checkedChildren={<FontAwesomeIcon icon={faMoon} />}
@@ -265,6 +273,13 @@ let App = ({ className }: Props) => {
                     checked={darkMode}
                     onChange={onLightDarkSwitchChangeEventHandler}
                 />
+                <Tooltip title="About">
+                    <Button //
+                        icon={<FontAwesomeIcon icon={faInfo} />}
+                        onClick={showAboutClick}
+                        className="Toolbar-button"
+                    />
+                </Tooltip>
             </div>
             <div className="App-toolbar">
                 <Tooltip title="New dictionary">
@@ -324,6 +339,12 @@ let App = ({ className }: Props) => {
                 fields={keys}
                 onClose={onAddEditRowDataPopupClose}
                 editAddEntry={editEntryNewMode ? undefined : editAddEntry}
+            />
+
+            <AboutPopup //
+                visible={aboutPopupVisible}
+                onClose={() => setAboutPopupVisible(false)}
+                darkMode={darkMode}
             />
 
             <PwaBadge />

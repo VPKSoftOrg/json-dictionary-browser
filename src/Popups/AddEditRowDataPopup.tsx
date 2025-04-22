@@ -58,7 +58,7 @@ let AddEditRowDataPopup = ({
         const result = fields.map(f => (
             <tr key={f}>
                 <td>{pascalCase(f)}</td>
-                <td>
+                <td className="edit-input-cell">
                     <Input
                         type="text"
                         value={editAddEntryInternal?.[f] || ""}
@@ -70,9 +70,16 @@ let AddEditRowDataPopup = ({
         return result;
     }, [fields, editAddEntryInternal]);
 
+    const title = React.useMemo(() => {
+        if (editAddEntry) {
+            return "Edit entry";
+        }
+        return "Add entry";
+    }, [editAddEntry]);
+
     return (
         <Modal //
-            title="Select fields"
+            title={title}
             open={visible}
             width={600}
             centered
@@ -108,6 +115,10 @@ AddEditRowDataPopup = styled(AddEditRowDataPopup)`
     height: 100%;
     .Select-width {
         width: 450px;
+    }
+    .edit-input-cell {
+        padding-left: 10px;
+        width: 100%;
     }
 `;
 
