@@ -4,7 +4,7 @@ import * as React from "react";
 /**
  * Notification types for the {@link useNotify} hook.
  */
-export type NotificationType = "success" | "info" | "warning" | "error";
+type NotificationType = "success" | "info" | "warning" | "error";
 
 /**
  * A custom hook for antd notifications.
@@ -30,3 +30,4 @@ const useNotify = (): [
 };
 
 export { useNotify };
+export type { NotificationType };

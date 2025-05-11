@@ -9,6 +9,7 @@ type DropButtonProps = ButtonProps & {
 };
 
 let StyledButton = (props: DropButtonProps) => {
+    // biome-ignore lint/correctness/noUnusedVariables: the canDrop prop is not used by the Button component
     const { canDrop, ...restProps } = props;
     return <Button {...restProps} />;
 };
