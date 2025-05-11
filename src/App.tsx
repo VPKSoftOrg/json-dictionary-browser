@@ -199,10 +199,6 @@ let App = ({ className }: Props) => {
     }, []);
 
     React.useEffect(() => {
-        onResize();
-    }, [onResize]);
-
-    React.useEffect(() => {
         globalThis.addEventListener("resize", onResize);
         return () => {
             globalThis.removeEventListener("resize", onResize);
@@ -244,6 +240,10 @@ let App = ({ className }: Props) => {
     const showAboutClick = React.useCallback(() => {
         setAboutPopupVisible(true);
     }, []);
+
+    React.useEffect(() => {
+        onResize();
+    }, [onResize]);
 
     return (
         <div id="App" className={classNames(className, App.name)}>
