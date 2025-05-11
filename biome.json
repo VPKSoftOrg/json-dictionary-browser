@@ -1,14 +1,13 @@
 {
-    "$schema": "https://biomejs.dev/schemas/1.9.4/schema.json",
+    "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
     "vcs": {
         "enabled": false,
         "clientKind": "git",
         "useIgnoreFile": false
     },
     "files": {
-        "include": ["src/**/*.ts", "src/**/*.tsx"],
-        "ignoreUnknown": false,
-        "ignore": ["vite-env.d.ts", "PasswordKeeper-help"]
+        "includes": ["src/**/*.ts", "src/**/*.tsx", "!src/**/*.d.ts"],
+        "ignoreUnknown": false
     },
     "formatter": {
         "enabled": true,
@@ -17,23 +16,17 @@
         "indentWidth": 4,
         "lineEnding": "lf"
     },
-    "organizeImports": {
-        "enabled": true
-    },
     "linter": {
         "enabled": true,
         "rules": {
             "nursery": {
-                "useConsistentCurlyBraces": "error"
+                "useConsistentCurlyBraces": "error",
+                "useExportsLast": "error"
             },
             "recommended": false,
-            "a11y": {
-                "noBlankTarget": "error"
-            },
             "complexity": {
                 "noExtraBooleanCast": "error",
                 "noForEach": "error",
-                "noMultipleSpacesInRegularExpressionLiterals": "error",
                 "noStaticOnlyClass": "error",
                 "noUselessCatch": "error",
                 "noUselessSwitchCase": "error",
@@ -136,8 +129,7 @@
                 "useNumberToFixedDigitsArgument": "error",
                 "useValidTypeof": "error"
             }
-        },
-        "ignore": ["**/.eslintrc.cjs", "src/localization/rust_i18n_transform", "**/vite.config.ts", "main.tsx"]
+        }
     },
     "javascript": {
         "formatter": {

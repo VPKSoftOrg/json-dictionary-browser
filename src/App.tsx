@@ -242,7 +242,10 @@ let App = ({ className }: Props) => {
     }, []);
 
     React.useEffect(() => {
-        onResize();
+        const timeout = globalThis.setTimeout(onResize, 1000);
+        return () => {
+            globalThis.clearTimeout(timeout);
+        };
     }, [onResize]);
 
     return (

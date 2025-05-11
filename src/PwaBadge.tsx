@@ -53,8 +53,6 @@ const PwaBadge = () => {
     );
 };
 
-export { PwaBadge };
-
 /**
  * This function will register a periodic sync check every hour, you can modify the interval as needed.
  */
@@ -81,3 +79,5 @@ const registerPeriodicSync = (period: number, swUrl: string, r: ServiceWorkerReg
         }
     }, period);
 };
+
+export { PwaBadge };
