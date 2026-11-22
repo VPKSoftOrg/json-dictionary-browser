@@ -67,6 +67,7 @@ jobs:
       run: |
         npm ci
         npm run lint
+        npm test
         npm run build
         (cd dist && zip -r "../json-dictionary-browser-v${{ steps.version.outputs.version }}.zip" .)
 

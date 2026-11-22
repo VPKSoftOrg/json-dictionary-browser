@@ -1,4 +1,4 @@
-import { Modal, Select } from "antd";
+import { Input, Modal, Select } from "antd";
 import classNames from "classnames";
 import * as React from "react";
 import { styled } from "styled-components";
@@ -16,12 +16,14 @@ type ServerPreferencesPopupProps = {
     allFields: Array<string>;
     /** A value indicating whether a new fields can be added. */
     addNew: boolean;
+    /** The initial name of the dictionary. */
+    initialName: string;
     /** A callback function to be called when the popup is closed. */
-    onClose: (accept: boolean, fields?: Array<string>) => void;
+    onClose: (accept: boolean, fields?: Array<string>, name?: string) => void;
 };
 
 /**
- * A component to set the application preferences.
+ * A popup to name a dictionary and select its fields.
  * @param param0 The component props: {@link ServerPreferencesPopupProps}.
  * @returns A component.
  */
@@ -30,17 +32,23 @@ let FieldSelectPopup = ({
     visible,
     allFields,
     addNew,
+    initialName,
     onClose,
 }: ServerPreferencesPopupProps) => {
     const [fields, setFields] = React.useState<Array<string>>([]);
+    const [name, setName] = React.useState(initialName);
+
+    React.useEffect(() => {
+        setName(initialName);
+    }, [initialName]);
 
     React.useEffect(() => {
         setFields(allFields.filter(f => f !== "id"));
     }, [allFields]);
 
     const onOkClick = React.useCallback(() => {
-        onClose(true, fields);
-    }, [fields, onClose]);
+        onClose(true, fields, name.trim());
+    }, [fields, name, onClose]);
 
     const onCancel = React.useCallback(() => {
         onClose(false);
@@ -50,6 +58,10 @@ let FieldSelectPopup = ({
         // Keep the field names as-is: they must match the keys in the data exactly
         const newValue = value.map(f => f.trim()).filter(f => f !== "" && f !== "id");
         setFields([...new Set(newValue)]);
+    }, []);
+
+    const nameChange = React.useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+        setName(e.target.value);
     }, []);
 
     const selectOptions = React.useMemo(() => {
@@ -65,7 +77,7 @@ let FieldSelectPopup = ({
 
     return (
         <Modal //
-            title="Select fields"
+            title={addNew ? "New dictionary" : "Select fields"}
             open={visible}
             width={600}
             centered
@@ -73,12 +85,25 @@ let FieldSelectPopup = ({
             onOk={onOkClick}
             keyboard
             maskClosable={false}
-            okButtonProps={{ disabled: fields.length === 0 }}
+            okButtonProps={{ disabled: fields.length === 0 || name.trim() === "" }}
             closable={false}
         >
             <div className={classNames(FieldSelectPopup.name, className)}>
                 <table className={classNames(FieldSelectPopup.name, className)}>
                     <tbody>
+                        <tr>
+                            <td>
+                                <div>Name</div>
+                            </td>
+                            <td>
+                                <Input //
+                                    value={name}
+                                    onChange={nameChange}
+                                    className="Select-width"
+                                    aria-label="Dictionary name"
+                                />
+                            </td>
+                        </tr>
                         <tr>
                             <td>
                                 <div>Data fields</div>
@@ -107,6 +132,10 @@ FieldSelectPopup = styled(FieldSelectPopup)`
     height: 100%;
     .Select-width {
         width: 450px;
+    }
+    td {
+        padding-bottom: 8px;
+        padding-right: 10px;
     }
 `;
 

@@ -1,9 +1,9 @@
 import * as React from "react";
 import "./App.css";
 import { faEdit, faFile, faMoon, faSun } from "@fortawesome/free-regular-svg-icons";
-import { faDownload, faInfo, faPlus } from "@fortawesome/free-solid-svg-icons";
+import { faDownload, faInfo, faPen, faPlus } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { Button, Input, Switch, Table, Tooltip } from "antd";
+import { Button, Empty, Input, Modal, Switch, Table, Tabs, Tooltip } from "antd";
 import type { Key } from "antd/es/table/interface";
 import classNames from "classnames";
 import Fuse from "fuse.js";
@@ -14,10 +14,21 @@ import { useNotify } from "./Hooks/Notify.ts";
 import { useDynamicDownload } from "./Hooks/UseDynamicDownload.ts";
 import { AboutPopup } from "./Popups/AboutPopup.tsx";
 import { AddEditRowDataPopup } from "./Popups/AddEditRowDataPopup.tsx";
+import { DictionaryNamePopup } from "./Popups/DictionaryNamePopup.tsx";
 import { FieldSelectPopup } from "./Popups/FieldSelectPopup.tsx";
 import { PwaBadge } from "./PwaBadge.tsx";
-import type { BaseProps, DictionaryEntry } from "./Types/BaseTypes.ts";
-import { getArrayFields } from "./Utilities/ArrayUtils.ts";
+import type { BaseProps, DictionaryEntry, DictionaryTab } from "./Types/BaseTypes.ts";
+import {
+    activeKeyAfterClose,
+    createDictionaryTab,
+    dictionaryNameToFileName,
+    fileNameToDictionaryName,
+    keepSelectedFields,
+    loadDictionaryTabs,
+    newDictionaryName,
+    parseDictionaryJson,
+    searchDictionary,
+} from "./Utilities/DictionaryUtils.ts";
 import { pascalCase } from "./Utilities/Misc.ts";
 import { useLocalStorage } from "./Utilities/UseLocalStorage.tsx";
 
@@ -26,6 +37,9 @@ type Props = {} & BaseProps;
 let App = ({ className }: Props) => {
     // The area where the notifications go
     const [contextHolder, notification] = useNotify();
+
+    // The confirmation dialogs
+    const [modal, modalContextHolder] = Modal.useModal();
 
     // Local storage; a failed write (e.g. the storage is full) is shown to the user
     const onStorageError = React.useCallback(
@@ -43,6 +57,7 @@ let App = ({ className }: Props) => {
 
     // Pure state
     const [searchText, setSearchText] = React.useState("");
+    const [searchQuery, setSearchQuery] = React.useState("");
     const { setTheme, updateBackground } = useAntdTheme();
     const [selectKeysVisible, setSelectKeysVisible] = React.useState(false);
     const [scrollHeight, setScrollHeight] = React.useState(0);
@@ -52,18 +67,31 @@ let App = ({ className }: Props) => {
     const [editEntryNewMode, setEditEntryNewMode] = React.useState(true);
     const [selectedRowKeys, setSelectedRowKeys] = React.useState<Array<Key>>([]);
     const [aboutPopupVisible, setAboutPopupVisible] = React.useState(false);
+    const [renameKey, setRenameKey] = React.useState<string | undefined>(undefined);
+    const [newDictionaryNameValue, setNewDictionaryNameValue] = React.useState("");
 
     // Persistent state
-    const [keys, setKeys] = React.useState<Array<string>>(getItem<Array<string>>("keys", []));
     const [darkMode, setDarkMode] = React.useState<boolean>(getItem<boolean>("darkMode", false));
-    const [dictionary, setDictionary] = React.useState<DictionaryEntry[]>(getItem<DictionaryEntry[]>("dictionary", []));
+    const [dictionaries, setDictionaries] = React.useState<DictionaryTab[]>(() => loadDictionaryTabs(getItem));
+    const [activeKey, setActiveKey] = React.useState<string | undefined>(
+        () => getItem<string | null>("activeDictionary", null) ?? undefined
+    );
 
     // Ref data not interacting with the UI
     const dictionaryTempRef = React.useRef<DictionaryEntry[] | undefined>(undefined);
     const keysTempRef = React.useRef<Array<string>>([]);
 
+    // The currently active dictionary tab, the first one if the stored active key is not valid
+    const activeTab = React.useMemo(
+        () => dictionaries.find(f => f.key === activeKey) ?? dictionaries[0],
+        [dictionaries, activeKey]
+    );
+
+    const dictionary = activeTab?.dictionary ?? emptyDictionary;
+    const keys = activeTab?.keys ?? emptyKeys;
+
     // Download the current dictionary
-    const downloadLinkClick = useDynamicDownload(dictionary);
+    const downloadLinkClick = useDynamicDownload(dictionary, dictionaryNameToFileName(activeTab?.name));
 
     const downloadClick = React.useCallback(() => {
         downloadLinkClick();
@@ -78,6 +106,49 @@ let App = ({ className }: Props) => {
         setItem("darkMode", darkMode);
     }, [darkMode, setItem]);
 
+    // Sets the dictionary tabs and saves them into the local storage
+    const updateDictionaries = React.useCallback(
+        (newDictionaries: DictionaryTab[]) => {
+            setDictionaries(newDictionaries);
+            setItem("dictionaries", newDictionaries);
+        },
+        [setItem]
+    );
+
+    // Sets the active dictionary tab, saves it into the local storage and resets the tab-specific UI state
+    const activateTab = React.useCallback(
+        (key: string | undefined) => {
+            setActiveKey(key);
+            setItem("activeDictionary", key ?? null);
+            setSearchText("");
+            setSearchQuery("");
+            setSelectedRowKeys([]);
+        },
+        [setItem]
+    );
+
+    // Replaces the entries of the active dictionary
+    const updateActiveDictionary = React.useCallback(
+        (newDictionary: DictionaryEntry[]) => {
+            if (!activeTab) {
+                return;
+            }
+            updateDictionaries(
+                dictionaries.map(f => (f.key === activeTab.key ? { ...f, dictionary: newDictionary } : f))
+            );
+        },
+        [activeTab, dictionaries, updateDictionaries]
+    );
+
+    // Adds a new dictionary tab and activates it
+    const addDictionaryTab = React.useCallback(
+        (tab: DictionaryTab) => {
+            updateDictionaries([...dictionaries, tab]);
+            activateTab(tab.key);
+        },
+        [dictionaries, updateDictionaries, activateTab]
+    );
+
     const fuse = React.useMemo(() => {
         const fuse = new Fuse(dictionary, {
             keys: [...keys],
@@ -88,28 +159,23 @@ let App = ({ className }: Props) => {
 
     const onGetFile = React.useCallback(
         async (file: File) => {
-            const data = file;
-            let parsed: unknown[] | undefined;
+            let text: string;
             try {
-                const text = await data.text();
-                parsed = JSON.parse(text);
+                text = await file.text();
             } catch (e) {
                 notification("error", `Error opening the file: '${e}'.`);
                 return;
             }
-            if (!parsed) {
-                notification("error", "The file is empty.");
-                return;
-            }
-            if (!Array.isArray(parsed)) {
-                notification("error", "The contents must be a JSON array.");
+
+            const result = parseDictionaryJson(text);
+            if (!result.success) {
+                notification("error", result.error);
                 return;
             }
 
-            // Assign sequential ids so every row has a unique key
-            const dictionary = (parsed as DictionaryEntry[]).map((f, i) => ({ ...f, id: i })) as DictionaryEntry[];
-            dictionaryTempRef.current = dictionary;
-            keysTempRef.current = getArrayFields(dictionary);
+            dictionaryTempRef.current = result.dictionary;
+            keysTempRef.current = result.fields;
+            setNewDictionaryNameValue(fileNameToDictionaryName(file.name));
             setAddNew(false);
             setSelectKeysVisible(true);
         },
@@ -132,23 +198,17 @@ let App = ({ className }: Props) => {
     }, [keys]);
 
     // The displayed data is derived from the live dictionary so edits and newly loaded data are always shown
-    const dataSource = React.useMemo(() => {
-        if (searchText.trim() === "") {
-            return dictionary;
-        }
-        return (
-            fuse
-                .search(searchText)
-                .filter(({ score }) => (score ?? 1) < 0.3)
-                .sort((a, b) => (a.score ?? 0) - (b.score ?? 0))
-                // Take only ten first from the results
-                .slice(0, 10)
-                .map(({ item }) => item)
-        );
-    }, [fuse, dictionary, searchText]);
+    const dataSource = React.useMemo(
+        () => searchDictionary(fuse, searchQuery) ?? dictionary,
+        [fuse, dictionary, searchQuery]
+    );
 
     const onSearch = React.useCallback((value: string) => {
-        setSearchText(value);
+        setSearchQuery(value);
+    }, []);
+
+    const onSearchTextChange = React.useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+        setSearchText(e.target.value);
     }, []);
 
     const onLightDarkSwitchChangeEventHandler = React.useCallback((checked: boolean) => {
@@ -156,40 +216,20 @@ let App = ({ className }: Props) => {
     }, []);
 
     const onSelectKeysClose = React.useCallback(
-        (accept: boolean, fields?: Array<string>) => {
+        (accept: boolean, fields?: Array<string>, name?: string) => {
             if (accept && addNew) {
-                dictionaryTempRef.current = undefined;
-                setKeys(fields ?? []);
-                setDictionary([]);
-                setSelectedRowKeys([]);
-                setItem("dictionary", []);
-                setItem("keys", fields ?? []);
+                addDictionaryTab(createDictionaryTab(name ?? "", [], fields ?? []));
             } else if (accept && dictionaryTempRef.current) {
-                setKeys(fields ?? []);
-                const newDictionary = [...dictionaryTempRef.current];
-                // Select the keys which are not in the fields but exists in the keysTempRef
-                const newKeys = keysTempRef.current.filter(key => !fields?.includes(key));
-
-                for (const key of newKeys) {
-                    if (key === "id") {
-                        continue;
-                    }
-                    for (const item of newDictionary) {
-                        delete item[key];
-                    }
-                }
-                setDictionary(newDictionary);
-                setSelectedRowKeys([]);
-                setItem("dictionary", newDictionary);
-                setItem("keys", fields ?? []);
-            } else {
-                dictionaryTempRef.current = undefined;
-                keysTempRef.current = [];
+                const newDictionary = keepSelectedFields(dictionaryTempRef.current, fields ?? []);
+                addDictionaryTab(createDictionaryTab(name ?? "", newDictionary, fields ?? []));
             }
+
+            dictionaryTempRef.current = undefined;
+            keysTempRef.current = [];
             setSelectKeysVisible(false);
             setAddNew(false);
         },
-        [setItem, addNew]
+        [addNew, addDictionaryTab]
     );
 
     const onAddEditRowDataPopupClose = React.useCallback(
@@ -207,19 +247,19 @@ let App = ({ className }: Props) => {
                     }
                     newDictionary[index] = data;
                 }
-                setDictionary(newDictionary);
-                setItem("dictionary", newDictionary);
+                updateActiveDictionary(newDictionary);
             }
             setAddOrEditEntryVisible(false);
         },
-        [setItem, dictionary, editAddEntry, editEntryNewMode, notification]
+        [dictionary, editAddEntry, editEntryNewMode, notification, updateActiveDictionary]
     );
 
     // The Antd table scroll height must be calculated dynamically as it doesn't support max-height.
     // A ResizeObserver catches every size change (window resize, toolbar wrapping, header changes).
     const tableContainerRef = React.useRef<HTMLDivElement>(null);
+    const activeTabKey = activeTab?.key;
 
-    // biome-ignore lint/correctness/useExhaustiveDependencies: re-observe the header when the columns (keys) change
+    // biome-ignore lint/correctness/useExhaustiveDependencies: re-observe the header when the columns (keys) or the table (tab) change
     React.useEffect(() => {
         const tableContainer = tableContainerRef.current;
         if (!tableContainer) {
@@ -243,12 +283,13 @@ let App = ({ className }: Props) => {
         return () => {
             observer.disconnect();
         };
-    }, [keys]);
+    }, [keys, activeTabKey]);
 
     const addNewClick = React.useCallback(() => {
+        setNewDictionaryNameValue(newDictionaryName(dictionaries.map(f => f.name)));
         setAddNew(true);
         setSelectKeysVisible(true);
-    }, []);
+    }, [dictionaries]);
 
     const addClick = React.useCallback(() => {
         setEditEntryNewMode(true);
@@ -294,9 +335,69 @@ let App = ({ className }: Props) => {
         setAboutPopupVisible(true);
     }, []);
 
+    const closeTab = React.useCallback(
+        (key: string) => {
+            const tab = dictionaries.find(f => f.key === key);
+            if (!tab) {
+                return;
+            }
+            void modal.confirm({
+                title: "Close dictionary",
+                content: `Close the dictionary '${tab.name}'? Its data will be removed from the browser. Save it first if you want to keep it.`,
+                okText: "Close",
+                okButtonProps: { danger: true },
+                onOk: () => {
+                    activateTab(activeKeyAfterClose(dictionaries, key, activeTab?.key));
+                    updateDictionaries(dictionaries.filter(f => f.key !== key));
+                },
+            });
+        },
+        [dictionaries, activeTab, modal, activateTab, updateDictionaries]
+    );
+
+    const onTabEdit = React.useCallback(
+        (targetKey: React.MouseEvent | React.KeyboardEvent | string, action: "add" | "remove") => {
+            if (action === "add") {
+                addNewClick();
+            } else if (typeof targetKey === "string") {
+                closeTab(targetKey);
+            }
+        },
+        [addNewClick, closeTab]
+    );
+
+    const renameClick = React.useCallback(() => {
+        setRenameKey(activeTab?.key);
+    }, [activeTab]);
+
+    const onRenamePopupClose = React.useCallback(
+        (accept: boolean, name?: string) => {
+            if (accept && name && renameKey) {
+                updateDictionaries(dictionaries.map(f => (f.key === renameKey ? { ...f, name } : f)));
+            }
+            setRenameKey(undefined);
+        },
+        [renameKey, dictionaries, updateDictionaries]
+    );
+
+    const tabItems = React.useMemo(() => {
+        return dictionaries.map(f => ({
+            key: f.key,
+            label: (
+                <Tooltip title="Double-click to rename" mouseEnterDelay={1}>
+                    <span onDoubleClick={() => setRenameKey(f.key)}>{f.name}</span>
+                </Tooltip>
+            ),
+            closable: true,
+        }));
+    }, [dictionaries]);
+
+    const renameTab = dictionaries.find(f => f.key === renameKey);
+
     return (
         <div id="App" className={classNames(className, App.name)}>
             {contextHolder}
+            {modalContextHolder}
             <div className="App-toolbar">
                 <DragDropOpenFileAreaButton //
                     onGetFile={onGetFile}
@@ -305,14 +406,18 @@ let App = ({ className }: Props) => {
                 <Input.Search //
                     id="app-toolbar-search"
                     placeholder="Search"
+                    value={searchText}
+                    onChange={onSearchTextChange}
                     onSearch={onSearch}
                     className="App-toolbar-search"
+                    disabled={!activeTab}
                 />
                 <Tooltip title="Save the dictionary">
                     <Button //
                         icon={<FontAwesomeIcon icon={faDownload} />}
                         onClick={downloadClick}
                         className="Toolbar-button"
+                        disabled={!activeTab}
                     />
                 </Tooltip>
                 <Switch
@@ -340,11 +445,22 @@ let App = ({ className }: Props) => {
                         New dictionary
                     </Button>
                 </Tooltip>
+                <Tooltip title="Rename dictionary">
+                    <Button //
+                        icon={<FontAwesomeIcon icon={faPen} />}
+                        onClick={renameClick}
+                        className="Toolbar-button"
+                        disabled={!activeTab}
+                    >
+                        Rename dictionary
+                    </Button>
+                </Tooltip>
                 <Tooltip title="Add new entry">
                     <Button //
                         icon={<FontAwesomeIcon icon={faPlus} />}
                         onClick={addClick}
                         className="Toolbar-button"
+                        disabled={!activeTab}
                     >
                         Add new entry
                     </Button>
@@ -360,23 +476,46 @@ let App = ({ className }: Props) => {
                     </Button>
                 </Tooltip>
             </div>
+            <Tabs //
+                className="App-tabs"
+                type="editable-card"
+                size="small"
+                activeKey={activeTab?.key}
+                items={tabItems}
+                onChange={activateTab}
+                onEdit={onTabEdit}
+                addIcon={
+                    <Tooltip title="New dictionary">
+                        <FontAwesomeIcon icon={faPlus} />
+                    </Tooltip>
+                }
+            />
             <div id="table-container" ref={tableContainerRef} className="App-table-container">
-                <Table<DictionaryEntry> //
-                    id="table-fixed-height"
-                    className="App-table"
-                    columns={tableColumns}
-                    dataSource={dataSource}
-                    pagination={false}
-                    virtual
-                    scroll={{ y: scrollHeight }}
-                    rowKey="id"
-                    rowSelection={rowSelection}
-                />
+                {activeTab ? (
+                    <Table<DictionaryEntry> //
+                        key={activeTab.key}
+                        id="table-fixed-height"
+                        className="App-table"
+                        columns={tableColumns}
+                        dataSource={dataSource}
+                        pagination={false}
+                        virtual
+                        scroll={{ y: scrollHeight }}
+                        rowKey="id"
+                        rowSelection={rowSelection}
+                    />
+                ) : (
+                    <Empty //
+                        className="App-empty"
+                        description="No dictionaries open. Open a JSON file or create a new dictionary."
+                    />
+                )}
             </div>
             {selectKeysVisible && (
                 <FieldSelectPopup //
                     visible={selectKeysVisible}
                     allFields={addNew ? defaultNewFields : keysTempRef.current}
+                    initialName={newDictionaryNameValue}
                     onClose={onSelectKeysClose}
                     addNew={addNew}
                 />
@@ -388,6 +527,12 @@ let App = ({ className }: Props) => {
                 fields={keys}
                 onClose={onAddEditRowDataPopupClose}
                 editAddEntry={editEntryNewMode ? undefined : editAddEntry}
+            />
+
+            <DictionaryNamePopup //
+                visible={renameTab !== undefined}
+                name={renameTab?.name ?? ""}
+                onClose={onRenamePopupClose}
             />
 
             <AboutPopup //
@@ -402,6 +547,8 @@ let App = ({ className }: Props) => {
 };
 
 const defaultNewFields = ["name", "value"];
+const emptyDictionary: DictionaryEntry[] = [];
+const emptyKeys: Array<string> = [];
 
 App = styled(App)`
     display: flex;
@@ -423,9 +570,24 @@ App = styled(App)`
     .App-toolbar-switch {
         align-self: center;
     }
+    .App-tabs {
+        margin-top: 10px;
+        margin-left: 10px;
+        margin-right: 10px;
+    }
+    .App-tabs .ant-tabs-nav {
+        margin-bottom: 0;
+    }
+    .App-tabs .ant-tabs-tab {
+        user-select: none;
+    }
     .App-table-container {
-        height: 100%;
+        flex: 1;
+        min-height: 0;
         overflow: hidden;
+    }
+    .App-empty {
+        margin-top: 40px;
     }
     .Toolbar-button {
         min-width: 40px;

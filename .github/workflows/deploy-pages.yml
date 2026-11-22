@@ -25,6 +25,7 @@ jobs:
         cache: 'npm'
     - run: npm ci
     - run: npm run lint
+    - run: npm test
     - name: Build
       run: npm run build
       env:

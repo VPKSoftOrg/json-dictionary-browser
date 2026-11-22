@@ -1,6 +1,24 @@
 # AGENTS.md
 
-Guidance for AI coding agents working in this repository. See `README.md` for the project overview.
+Guidance for AI coding agents working in this repository. See `README.md` for the project overview and `CLAUDE.md` for the commands, code style and architecture.
+
+## Before finishing a change
+
+Run `npm run build`, `npm run lint` and `npm test`; CI runs all three and each must pass. `npm run lint-fix` applies Biome's formatting and safe fixes.
+
+## Tests
+
+Tests use Jest with `@swc/jest`, jsdom and React Testing Library, and live in `src/Tests/` as `*.test.ts` / `*.test.tsx` (PascalCase file names, as Biome requires). SWC only strips the types — TypeScript 7 has no compiler API for ts-jest — so the tests are type checked by `tsc -b` through `tsconfig.test.json` (`tsconfig.app.json` excludes `src/Tests` to keep the Jest types out of the application). Biome lints them like the application code.
+
+- Put new non-UI logic in a pure module such as `src/Utilities/DictionaryUtils.ts` and unit test it there, rather than adding it inline to `App.tsx`.
+- Add or update tests for the behaviour you change: utility tests for logic, component tests (`render` + `screen`/`fireEvent`) for popups and `App` flows.
+- Query elements by role, label or text (give inputs an `aria-label` if needed), not by CSS class names.
+- `src/Tests/Setup.ts` provides the browser APIs that AntD and the app need but jsdom lacks (`matchMedia`, `ResizeObserver`, Blob URLs); add any further polyfills there. CSS, image and `virtual:pwa-register/react` imports are mapped to stubs in `src/Tests/Mocks/` by `jest.config.js`, which also defines the `__APP_VERSION__` and `__APP_NAME__` globals.
+- AntD modals animate; wrap clicks that close them in `act(async () => ...)` and assert with `waitFor`/`findBy*`.
+
+## Stored data compatibility
+
+Users' dictionaries live only in their browser's `localStorage` (`dictionaries`, `activeDictionary`, `darkMode`). A change to the stored shape must keep existing data loadable: convert old data on load as `loadDictionaryTabs` does for the pre-1.1 `dictionary`/`keys` items, cover the conversion with a test, and bump the version accordingly (see below). The same applies to the imported/exported dictionary JSON format.
 
 ## Versioning (SemVer)
 

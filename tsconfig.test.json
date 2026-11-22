@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.test.tsbuildinfo",
+    "types": ["wicg-file-system-access", "jest", "node"]
+  },
+  "include": ["src"],
+  "exclude": []
+}
