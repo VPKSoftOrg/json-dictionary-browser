@@ -39,7 +39,7 @@ A JSON data array with unique *id*, and *custom* fields
 The *id* values are reassigned when a file is imported.
 
 ## Development
-Requires [Node.js](https://nodejs.org) 22 or later (CI uses 22.x).
+Requires [Node.js](https://nodejs.org) 26 or later (CI uses 26.x).
 
 ```bash
 npm install
