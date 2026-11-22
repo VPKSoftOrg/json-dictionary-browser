@@ -33,14 +33,18 @@ let AddEditRowDataPopup = ({
 }: AddEditRowDataPopupProps) => {
     const [editAddEntryInternal, setEditAddEntryInternal] = React.useState<DictionaryEntry | undefined>();
 
+    // Reset the edited values every time the popup opens so cancelled edits don't linger
     React.useEffect(() => {
+        if (!visible) {
+            return;
+        }
         if (editAddEntry) {
-            setEditAddEntryInternal(editAddEntry);
+            setEditAddEntryInternal({ ...editAddEntry });
         } else {
             const newEntry = createEmptyEntry(fields, currentDictionary);
             setEditAddEntryInternal(newEntry);
         }
-    }, [editAddEntry, fields, currentDictionary]);
+    }, [visible, editAddEntry, fields, currentDictionary]);
 
     const onOkClick = React.useCallback(() => {
         onClose(true, editAddEntryInternal);
