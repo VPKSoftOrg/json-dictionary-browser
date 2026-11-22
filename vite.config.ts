@@ -16,7 +16,7 @@ export default defineConfig({
     manifest: {
       name: 'JSON Dictionary Browser',
       short_name: 'JSON Dictionary Browser',
-      description: 'A Dictionary for Chart Abbreviations',
+      description: 'A Dictionary for Chat Abbreviations',
       theme_color: '#ffffff',
     },
 

@@ -14,68 +14,127 @@ let StyledButton = (props: DropButtonProps) => {
 };
 
 StyledButton = styled(StyledButton)`
-    cursor: ${props => (props.canDrop ? "pointer" : "not-allowed")}; 
+    cursor: ${props => (props.canDrop ? "pointer" : "not-allowed")};
 `;
 
 type DragDropOpenFileAreaProps = {
     onGetFile: (file: File) => void;
+    /** Occurs when the user tries to open something that isn't a single JSON file. */
+    onOpenError?: (message: string) => void;
 } & ButtonProps;
 
+const jsonMimeType = "application/json";
+
+const isJsonFile = (file: File) => file.type === jsonMimeType || file.name.toLowerCase().endsWith(".json");
+
+/**
+ * Checks whether the dragged data can be dropped. Some platforms don't report the MIME type
+ * while dragging, so an empty type is allowed here and the file is validated again on drop.
+ */
+const isDroppable = (dataTransfer: DataTransfer) => {
+    const items = dataTransfer.items;
+    if (items.length !== 1) {
+        return false;
+    }
+    const item = items[0];
+    return item.kind === "file" && (item.type === "" || item.type === jsonMimeType);
+};
+
 let DragDropOpenFileAreaButton = (props: DragDropOpenFileAreaProps) => {
+    const { onGetFile, onOpenError } = props;
     const [canDrop, setCanDrop] = React.useState(true);
-    const onDragOver = React.useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+    const onDragOver = React.useCallback((e: React.DragEvent<HTMLElement>) => {
         e.preventDefault();
-        if (e.dataTransfer.items.length === 1) {
-            if (e.dataTransfer.items[0].kind === "file") {
-                if (e.dataTransfer.items[0].type === "application/json") {
-                    setCanDrop(true);
-                    e.dataTransfer.effectAllowed = "copy";
-                }
-            }
-        } else if (e.dataTransfer.items.length === 0) {
-            setCanDrop(true);
-            e.dataTransfer.effectAllowed = "copy";
-        } else {
-            setCanDrop(false);
-            e.dataTransfer.effectAllowed = "none";
-            e.stopPropagation();
-        }
+        const droppable = isDroppable(e.dataTransfer);
+        setCanDrop(droppable);
+        e.dataTransfer.dropEffect = droppable ? "copy" : "none";
+    }, []);
+
+    const onDragLeave = React.useCallback(() => {
+        setCanDrop(true);
     }, []);
 
     const onDrop = React.useCallback(
-        (e: React.DragEvent<HTMLDivElement>) => {
+        (e: React.DragEvent<HTMLElement>) => {
             e.preventDefault();
-            const file = e.dataTransfer.items[0].getAsFile();
-            if (file) {
-                props.onGetFile(file);
+            setCanDrop(true);
+            const files = e.dataTransfer.files;
+            if (files.length !== 1 || !isJsonFile(files[0])) {
+                onOpenError?.("Drop a single JSON file.");
+                return;
             }
+            onGetFile(files[0]);
         },
-        [props.onGetFile]
+        [onGetFile, onOpenError]
+    );
+
+    const onFileInputChange = React.useCallback(
+        (e: React.ChangeEvent<HTMLInputElement>) => {
+            const file = e.target.files?.[0];
+            // Clear the value so selecting the same file again still fires a change event
+            e.target.value = "";
+            if (!file) {
+                return;
+            }
+            if (!isJsonFile(file)) {
+                onOpenError?.("Select a JSON file.");
+                return;
+            }
+            onGetFile(file);
+        },
+        [onGetFile, onOpenError]
     );
 
     const onButtonClick = React.useCallback(async () => {
-        const file = await globalThis.showOpenFilePicker(pickerOpts);
-        const data = await file[0].getFile();
-        if (data.name.endsWith(".json")) {
-            props.onGetFile(data);
+        // The File System Access API isn't available in every browser (e.g. Firefox and Safari)
+        if (typeof globalThis.showOpenFilePicker !== "function") {
+            fileInputRef.current?.click();
+            return;
         }
-    }, [props.onGetFile]);
 
-    const buttonProps = React.useMemo(() => omitFields(props, ["onGetFile"]), [props]);
+        try {
+            const [handle] = await globalThis.showOpenFilePicker(pickerOpts);
+            const data = await handle.getFile();
+            if (!isJsonFile(data)) {
+                onOpenError?.("Select a JSON file.");
+                return;
+            }
+            onGetFile(data);
+        } catch (error) {
+            // The user cancelled the picker
+            if (error instanceof DOMException && error.name === "AbortError") {
+                return;
+            }
+            onOpenError?.(`Error opening the file: '${error}'.`);
+        }
+    }, [onGetFile, onOpenError]);
+
+    const buttonProps = React.useMemo(() => omitFields(props, ["onGetFile", "onOpenError"]), [props]);
 
     return (
-        <StyledButton
-            {...buttonProps}
-            canDrop={canDrop}
-            disabled={!canDrop}
-            className={classNames(DragDropOpenFileAreaButton.name, props.className)}
-            onDragOver={onDragOver}
-            onDragEnter={onDragOver}
-            onDrop={onDrop}
-            onClick={onButtonClick}
-        >
-            Drag & Drop a JSON file here or click to open
-        </StyledButton>
+        <>
+            <StyledButton
+                {...buttonProps}
+                canDrop={canDrop}
+                className={classNames(DragDropOpenFileAreaButton.name, props.className)}
+                onDragOver={onDragOver}
+                onDragEnter={onDragOver}
+                onDragLeave={onDragLeave}
+                onDrop={onDrop}
+                onClick={onButtonClick}
+            >
+                Drag & Drop a JSON file here or click to open
+            </StyledButton>
+            <input
+                ref={fileInputRef}
+                type="file"
+                accept=".json,application/json"
+                style={{ display: "none" }}
+                onChange={onFileInputChange}
+            />
+        </>
     );
 };
 
@@ -93,7 +152,7 @@ const pickerOpts: OpenFilePickerOptions = {
 };
 
 DragDropOpenFileAreaButton = styled(DragDropOpenFileAreaButton)`
-    
+
 `;
 
 export { DragDropOpenFileAreaButton };

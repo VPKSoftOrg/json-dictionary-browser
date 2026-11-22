@@ -18,19 +18,31 @@ import { FieldSelectPopup } from "./Popups/FieldSelectPopup.tsx";
 import { PwaBadge } from "./PwaBadge.tsx";
 import type { BaseProps, DictionaryEntry } from "./Types/BaseTypes.ts";
 import { getArrayFields } from "./Utilities/ArrayUtils.ts";
+import { pascalCase } from "./Utilities/Misc.ts";
 import { useLocalStorage } from "./Utilities/UseLocalStorage.tsx";
 
 type Props = {} & BaseProps;
 
 let App = ({ className }: Props) => {
-    // Local storage
-    const [setItem, , getItem] = useLocalStorage();
+    // The area where the notifications go
+    const [contextHolder, notification] = useNotify();
+
+    // Local storage; a failed write (e.g. the storage is full) is shown to the user
+    const onStorageError = React.useCallback(
+        (operation: "read" | "write", key: string) => {
+            if (operation === "write") {
+                notification("error", `Could not save '${key}' to the browser storage. The storage may be full.`);
+            }
+        },
+        [notification]
+    );
+    const [setItem, , getItem] = useLocalStorage(onStorageError);
 
     // Antd theme selection design token
     const { token } = useAntdToken();
 
     // Pure state
-    const [dataSource, setDataSource] = React.useState<DictionaryEntry[]>();
+    const [searchText, setSearchText] = React.useState("");
     const { setTheme, updateBackground } = useAntdTheme();
     const [selectKeysVisible, setSelectKeysVisible] = React.useState(false);
     const [scrollHeight, setScrollHeight] = React.useState(0);
@@ -49,9 +61,6 @@ let App = ({ className }: Props) => {
     // Ref data not interacting with the UI
     const dictionaryTempRef = React.useRef<DictionaryEntry[] | undefined>(undefined);
     const keysTempRef = React.useRef<Array<string>>([]);
-
-    // The area where the notifications go
-    const [contextHolder, notification] = useNotify();
 
     // Download the current dictionary
     const downloadLinkClick = useDynamicDownload(dictionary);
@@ -97,37 +106,50 @@ let App = ({ className }: Props) => {
                 return;
             }
 
-            let dictionary = parsed as DictionaryEntry[];
-            dictionary = dictionary.map((f, i) => ({ ...f, id: i })) as DictionaryEntry[];
-            dictionaryTempRef.current = parsed as DictionaryEntry[];
+            // Assign sequential ids so every row has a unique key
+            const dictionary = (parsed as DictionaryEntry[]).map((f, i) => ({ ...f, id: i })) as DictionaryEntry[];
+            dictionaryTempRef.current = dictionary;
             keysTempRef.current = getArrayFields(dictionary);
+            setAddNew(false);
             setSelectKeysVisible(true);
+        },
+        [notification]
+    );
+
+    const onOpenFileError = React.useCallback(
+        (message: string) => {
+            notification("error", message);
         },
         [notification]
     );
 
     const tableColumns = React.useMemo(() => {
         return keys.map(key => ({
-            title: key[0].toUpperCase() + key.slice(1),
+            title: pascalCase(key),
             dataIndex: key,
             key: key,
         }));
     }, [keys]);
 
-    const onSearch = React.useCallback(
-        (value: string) => {
-            if (value.trim() === "") {
-                setDataSource(dictionary);
-                return;
-            }
-            let result = fuse.search(value);
-            result = result.filter(({ score }) => score ?? 1 < 0.3).sort((a, b) => (a.score ?? 0) - (b.score ?? 0));
-            // Take only ten first from the results
-            result = result.slice(0, 10);
-            setDataSource(result.map(({ item }) => item));
-        },
-        [fuse, dictionary]
-    );
+    // The displayed data is derived from the live dictionary so edits and newly loaded data are always shown
+    const dataSource = React.useMemo(() => {
+        if (searchText.trim() === "") {
+            return dictionary;
+        }
+        return (
+            fuse
+                .search(searchText)
+                .filter(({ score }) => (score ?? 1) < 0.3)
+                .sort((a, b) => (a.score ?? 0) - (b.score ?? 0))
+                // Take only ten first from the results
+                .slice(0, 10)
+                .map(({ item }) => item)
+        );
+    }, [fuse, dictionary, searchText]);
+
+    const onSearch = React.useCallback((value: string) => {
+        setSearchText(value);
+    }, []);
 
     const onLightDarkSwitchChangeEventHandler = React.useCallback((checked: boolean) => {
         setDarkMode(checked);
@@ -138,14 +160,12 @@ let App = ({ className }: Props) => {
             if (accept && addNew) {
                 dictionaryTempRef.current = undefined;
                 setKeys(fields ?? []);
-                setSelectKeysVisible(false);
                 setDictionary([]);
+                setSelectedRowKeys([]);
                 setItem("dictionary", []);
                 setItem("keys", fields ?? []);
             } else if (accept && dictionaryTempRef.current) {
                 setKeys(fields ?? []);
-                setSelectKeysVisible(false);
-                setDictionary(dictionaryTempRef.current);
                 const newDictionary = [...dictionaryTempRef.current];
                 // Select the keys which are not in the fields but exists in the keysTempRef
                 const newKeys = keysTempRef.current.filter(key => !fields?.includes(key));
@@ -159,13 +179,15 @@ let App = ({ className }: Props) => {
                     }
                 }
                 setDictionary(newDictionary);
+                setSelectedRowKeys([]);
                 setItem("dictionary", newDictionary);
                 setItem("keys", fields ?? []);
             } else {
                 dictionaryTempRef.current = undefined;
                 keysTempRef.current = [];
-                setSelectKeysVisible(false);
             }
+            setSelectKeysVisible(false);
+            setAddNew(false);
         },
         [setItem, addNew]
     );
@@ -173,11 +195,16 @@ let App = ({ className }: Props) => {
     const onAddEditRowDataPopupClose = React.useCallback(
         (accept: boolean, data?: DictionaryEntry) => {
             if (accept && data) {
-                let newDictionary = [...dictionary];
+                const newDictionary = [...dictionary];
                 if (editEntryNewMode) {
                     newDictionary.push(data);
-                } else if (editAddEntry && !editEntryNewMode) {
-                    const index = newDictionary.findIndex(f => f.id === editAddEntry.id);
+                } else {
+                    const index = editAddEntry ? newDictionary.findIndex(f => f.id === editAddEntry.id) : -1;
+                    if (index === -1) {
+                        notification("error", "The edited entry no longer exists in the dictionary.");
+                        setAddOrEditEntryVisible(false);
+                        return;
+                    }
                     newDictionary[index] = data;
                 }
                 setDictionary(newDictionary);
@@ -185,25 +212,38 @@ let App = ({ className }: Props) => {
             }
             setAddOrEditEntryVisible(false);
         },
-        [setItem, dictionary, editAddEntry, editEntryNewMode]
+        [setItem, dictionary, editAddEntry, editEntryNewMode, notification]
     );
 
-    // The Antd table scroll height must be calculated dynamically as it doesn't support max-height
-    const onResize = React.useCallback(() => {
-        const tableContainer = document.getElementById("table-container");
-        const tableHeader = document.getElementsByClassName("ant-table-header")?.[0] as HTMLElement | undefined;
-        const clientHeight = tableContainer?.clientHeight ?? 0;
-        const headerHeight = tableHeader?.offsetHeight ?? 0;
-        const totalHeight = clientHeight - headerHeight - 20;
-        setScrollHeight(totalHeight);
-    }, []);
+    // The Antd table scroll height must be calculated dynamically as it doesn't support max-height.
+    // A ResizeObserver catches every size change (window resize, toolbar wrapping, header changes).
+    const tableContainerRef = React.useRef<HTMLDivElement>(null);
 
+    // biome-ignore lint/correctness/useExhaustiveDependencies: re-observe the header when the columns (keys) change
     React.useEffect(() => {
-        globalThis.addEventListener("resize", onResize);
-        return () => {
-            globalThis.removeEventListener("resize", onResize);
+        const tableContainer = tableContainerRef.current;
+        if (!tableContainer) {
+            return;
+        }
+
+        const updateScrollHeight = () => {
+            const tableHeader = tableContainer.querySelector<HTMLElement>(".ant-table-header");
+            const headerHeight = tableHeader?.offsetHeight ?? 0;
+            setScrollHeight(Math.max(tableContainer.clientHeight - headerHeight - 20, 0));
         };
-    }, [onResize]);
+
+        const observer = new ResizeObserver(updateScrollHeight);
+        observer.observe(tableContainer);
+        const tableHeader = tableContainer.querySelector<HTMLElement>(".ant-table-header");
+        if (tableHeader) {
+            observer.observe(tableHeader);
+        }
+        updateScrollHeight();
+
+        return () => {
+            observer.disconnect();
+        };
+    }, [keys]);
 
     const addNewClick = React.useCallback(() => {
         setAddNew(true);
@@ -218,8 +258,11 @@ let App = ({ className }: Props) => {
     const editClick = React.useCallback(() => {
         if (selectedRowKeys.length > 0) {
             const lastSelectedKey = selectedRowKeys[selectedRowKeys.length - 1];
-            setEditAddEntry(dictionary.find(item => item.id === lastSelectedKey));
-
+            const entry = dictionary.find(item => item.id === lastSelectedKey);
+            if (!entry) {
+                return;
+            }
+            setEditAddEntry(entry);
             setEditEntryNewMode(false);
             setAddOrEditEntryVisible(true);
         }
@@ -229,24 +272,27 @@ let App = ({ className }: Props) => {
         setSelectedRowKeys(selectedRowKeys);
     }, []);
 
+    // Keep the selection in sync with the rows that are currently displayed
+    React.useEffect(() => {
+        setSelectedRowKeys(current => {
+            const visibleIds = new Set<Key>(dataSource.map(item => item.id));
+            const filtered = current.filter(key => visibleIds.has(key));
+            return filtered.length === current.length ? current : filtered;
+        });
+    }, [dataSource]);
+
     const rowSelection = React.useMemo(() => {
         return {
+            selectedRowKeys,
             onChange: onSelectionChange,
             columnWidth: 60,
             columnTitle: "Select",
         };
-    }, [onSelectionChange]);
+    }, [onSelectionChange, selectedRowKeys]);
 
     const showAboutClick = React.useCallback(() => {
         setAboutPopupVisible(true);
     }, []);
-
-    React.useEffect(() => {
-        const timeout = globalThis.setTimeout(onResize, 1000);
-        return () => {
-            globalThis.clearTimeout(timeout);
-        };
-    }, [onResize]);
 
     return (
         <div id="App" className={classNames(className, App.name)}>
@@ -254,6 +300,7 @@ let App = ({ className }: Props) => {
             <div className="App-toolbar">
                 <DragDropOpenFileAreaButton //
                     onGetFile={onGetFile}
+                    onOpenError={onOpenFileError}
                 />
                 <Input.Search //
                     id="app-toolbar-search"
@@ -272,7 +319,6 @@ let App = ({ className }: Props) => {
                     className="App-toolbar-switch"
                     checkedChildren={<FontAwesomeIcon icon={faMoon} />}
                     unCheckedChildren={<FontAwesomeIcon icon={faSun} />}
-                    defaultChecked
                     checked={darkMode}
                     onChange={onLightDarkSwitchChangeEventHandler}
                 />
@@ -314,12 +360,12 @@ let App = ({ className }: Props) => {
                     </Button>
                 </Tooltip>
             </div>
-            <div id="table-container" className="App-table-container">
+            <div id="table-container" ref={tableContainerRef} className="App-table-container">
                 <Table<DictionaryEntry> //
                     id="table-fixed-height"
                     className="App-table"
                     columns={tableColumns}
-                    dataSource={dataSource ?? dictionary}
+                    dataSource={dataSource}
                     pagination={false}
                     virtual
                     scroll={{ y: scrollHeight }}

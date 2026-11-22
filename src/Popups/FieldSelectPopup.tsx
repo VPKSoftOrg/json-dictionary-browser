@@ -2,6 +2,7 @@ import { Modal, Select } from "antd";
 import classNames from "classnames";
 import * as React from "react";
 import { styled } from "styled-components";
+import { pascalCase } from "../Utilities/Misc";
 
 /**
  * The props for the {@link PreferencesPopup} component.
@@ -46,8 +47,9 @@ let FieldSelectPopup = ({
     }, [onClose]);
 
     const selectChange = React.useCallback((value: string[]) => {
-        const newValue = value.map(f => f.toLowerCase());
-        setFields(newValue);
+        // Keep the field names as-is: they must match the keys in the data exactly
+        const newValue = value.map(f => f.trim()).filter(f => f !== "" && f !== "id");
+        setFields([...new Set(newValue)]);
     }, []);
 
     const selectOptions = React.useMemo(() => {
@@ -55,7 +57,7 @@ let FieldSelectPopup = ({
             .filter(f => f !== "id")
             .map((f, i) => (
                 <Select.Option value={f} key={i}>
-                    {`${f[0].toUpperCase()}${f.slice(1)}`}
+                    {pascalCase(f)}
                 </Select.Option>
             ));
         return result;
