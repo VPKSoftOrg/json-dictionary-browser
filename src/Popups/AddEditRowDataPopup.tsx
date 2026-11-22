@@ -3,6 +3,7 @@ import classNames from "classnames";
 import * as React from "react";
 import styled from "styled-components";
 import type { DictionaryEntry } from "../Types/BaseTypes";
+import { nextEntryId } from "../Utilities/DictionaryUtils";
 import { pascalCase } from "../Utilities/Misc";
 
 /**
@@ -107,9 +108,7 @@ const createEmptyEntry = (fields: Array<string>, currentDictionary: Array<Dictio
         result[field] = "";
     }
 
-    let max = currentDictionary.map(d => d.id).reduce((a, b) => Math.max(a, b), 0) + 1;
-
-    result["id"] = max;
+    result.id = nextEntryId(currentDictionary);
     return result;
 };
 
