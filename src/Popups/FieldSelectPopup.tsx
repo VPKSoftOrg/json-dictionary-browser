@@ -46,8 +46,9 @@ let FieldSelectPopup = ({
     }, [onClose]);
 
     const selectChange = React.useCallback((value: string[]) => {
-        const newValue = value.map(f => f.toLowerCase());
-        setFields(newValue);
+        // Keep the field names as-is: they must match the keys in the data exactly
+        const newValue = value.map(f => f.trim()).filter(f => f !== "" && f !== "id");
+        setFields([...new Set(newValue)]);
     }, []);
 
     const selectOptions = React.useMemo(() => {
