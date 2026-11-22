@@ -1,0 +1,88 @@
+name: Release
+
+# Creates a vX.Y.Z tag and a GitHub release when a pull request is merged into develop
+# and the PR raised the "version" in package.json (Semantic Versioning, see AGENTS.md).
+
+on:
+  pull_request:
+    types: [ closed ]
+    branches: [ "develop" ]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.pull_request.merge_commit_sha }}
+        fetch-depth: 0
+
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22.x
+        cache: 'npm'
+
+    - name: Check whether the version was raised
+      id: version
+      env:
+        BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      run: |
+        set -euo pipefail
+        semver() { node .github/scripts/semver.mjs "$@"; }
+
+        current=$(node -p "require('./package.json').version")
+        semver validate "$current"
+        previous=$(git show "$BASE_SHA:package.json" | node -p "JSON.parse(require('fs').readFileSync(0, 'utf8')).version")
+        echo "Version before the PR: $previous, after the PR: $current"
+
+        release=false
+        if [ "$(semver compare "$current" "$previous")" != "1" ]; then
+          echo "::notice::Version not raised ($previous -> $current); no release."
+        elif git rev-parse -q --verify "refs/tags/v$current" >/dev/null; then
+          echo "::warning::Tag v$current already exists; no release."
+        else
+          latest=$(git tag --list 'v[0-9]*' | sed 's/^v//' | while read -r t; do if semver validate "$t" 2>/dev/null; then echo "$t"; fi; done \
+            | { max=""; while read -r t; do if [ -z "$max" ] || [ "$(semver compare "$t" "$max")" = "1" ]; then max=$t; fi; done; echo "$max"; })
+          if [ -n "$latest" ] && [ "$(semver compare "$current" "$latest")" != "1" ]; then
+            echo "::warning::Version $current is not greater than the latest release v$latest; no release."
+          else
+            release=true
+          fi
+        fi
+
+        echo "release=$release" >> "$GITHUB_OUTPUT"
+        echo "version=$current" >> "$GITHUB_OUTPUT"
+        echo "prerelease=$(semver prerelease "$current")" >> "$GITHUB_OUTPUT"
+
+    - name: Build
+      if: steps.version.outputs.release == 'true'
+      run: |
+        npm ci
+        npm run lint
+        npm run build
+        (cd dist && zip -r "../json-dictionary-browser-v${{ steps.version.outputs.version }}.zip" .)
+
+    - name: Create tag and GitHub release
+      if: steps.version.outputs.release == 'true'
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        VERSION: ${{ steps.version.outputs.version }}
+        PRERELEASE: ${{ steps.version.outputs.prerelease }}
+        TARGET: ${{ github.event.pull_request.merge_commit_sha }}
+      run: |
+        set -euo pipefail
+        flags=()
+        if [ "$PRERELEASE" = "true" ]; then flags+=(--prerelease); else flags+=(--latest); fi
+        gh release create "v$VERSION" "json-dictionary-browser-v$VERSION.zip" \
+          --target "$TARGET" \
+          --title "v$VERSION" \
+          --generate-notes \
+          "${flags[@]}"

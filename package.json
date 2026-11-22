@@ -2,7 +2,7 @@
   "name": "json-dictionary-browser",
   "description": "JSON Dictionary Browser",
   "private": true,
-  "version": "0.0.4",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",

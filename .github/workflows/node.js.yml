@@ -23,6 +23,8 @@ jobs:
       with:
         node-version: ${{ matrix.node-version }}
         cache: 'npm'
+    - name: Validate the SemVer version in package.json
+      run: node .github/scripts/semver.mjs validate "$(node -p "require('./package.json').version")"
     - run: npm install
     - run: npm run build
     - run: npm run lint
