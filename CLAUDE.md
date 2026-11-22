@@ -22,6 +22,8 @@ Versioning follows SemVer from `package.json` `version`; releases/tags are creat
 
 Tests use Jest 30 + `@swc/jest` + jsdom + React Testing Library and live in `src/Tests/*.test.ts(x)`. TypeScript is 7 (the native compiler, no JS compiler API), so ts-jest cannot be used: SWC strips the types and `tsc -b` type checks the tests through `tsconfig.test.json`. `jest.config.js` maps CSS/image imports and the `virtual:pwa-register/react` module to stubs in `src/Tests/Mocks/` and defines the `__APP_VERSION__`/`__APP_NAME__` globals. `src/Tests/Setup.ts` polyfills what jsdom lacks (`matchMedia`, `ResizeObserver`, `URL.createObjectURL`).
 
+Git workflow (details in `AGENTS.md`): if the repository folder has local uncommitted changes, ask the user what to do; otherwise switch to `develop`, pull, create a new branch from it, commit the changes there, push, and create a PR into `develop` without asking.
+
 CI (`.github/workflows/node.js.yml`, Node 26, on `develop`) runs `npm install`, `npm run build`, `npm run lint`, `npm test` — all must pass. The release and GitHub Pages deploy workflows also lint and test before building.
 
 ## Code style
