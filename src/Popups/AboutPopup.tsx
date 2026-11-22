@@ -2,7 +2,6 @@ import { Button, Modal } from "antd";
 import classNames from "classnames";
 import * as React from "react";
 import { styled } from "styled-components";
-import * as Package from "../../package.json";
 import { GithubLogo, GithubLogoWhite, LogoImage, NetlifyLogo } from "../Utilities/Images";
 
 /**
@@ -19,13 +18,13 @@ type AboutPopupProps = {
     onClose: () => void;
 };
 
-const appVersion = Package.version;
+const appVersion = __APP_VERSION__;
 
 /** Opens an external URL in a new tab without giving it access to this window. */
 const openExternalUrl = (url: string) => {
     globalThis.open(url, "_blank", "noopener,noreferrer");
 };
-const appName = Package.description;
+const appName = __APP_NAME__;
 
 let AboutPopup = ({
     className, //
