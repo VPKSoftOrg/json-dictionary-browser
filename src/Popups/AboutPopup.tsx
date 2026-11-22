@@ -37,9 +37,9 @@ let AboutPopup = ({
         openExternalUrl("https://github.com/VPKSoft");
     }, []);
 
-    // Open the github.com URL when the corresponding component is clicked.
+    // Open the app hosted on GitHub Pages when the corresponding component is clicked.
     const openGitHubUrl = React.useCallback(() => {
-        openExternalUrl("https://github.com/VPKSoftOrg/json-dictionary-browser");
+        openExternalUrl("https://vpksoftorg.github.io/json-dictionary-browser/");
     }, []);
 
     // Open the latest release from the netlify.app.
