@@ -30,7 +30,7 @@ let App = ({ className }: Props) => {
     const { token } = useAntdToken();
 
     // Pure state
-    const [dataSource, setDataSource] = React.useState<DictionaryEntry[]>();
+    const [searchText, setSearchText] = React.useState("");
     const { setTheme, updateBackground } = useAntdTheme();
     const [selectKeysVisible, setSelectKeysVisible] = React.useState(false);
     const [scrollHeight, setScrollHeight] = React.useState(0);
@@ -97,10 +97,11 @@ let App = ({ className }: Props) => {
                 return;
             }
 
-            let dictionary = parsed as DictionaryEntry[];
-            dictionary = dictionary.map((f, i) => ({ ...f, id: i })) as DictionaryEntry[];
-            dictionaryTempRef.current = parsed as DictionaryEntry[];
+            // Assign sequential ids so every row has a unique key
+            const dictionary = (parsed as DictionaryEntry[]).map((f, i) => ({ ...f, id: i })) as DictionaryEntry[];
+            dictionaryTempRef.current = dictionary;
             keysTempRef.current = getArrayFields(dictionary);
+            setAddNew(false);
             setSelectKeysVisible(true);
         },
         [notification]
@@ -114,20 +115,25 @@ let App = ({ className }: Props) => {
         }));
     }, [keys]);
 
-    const onSearch = React.useCallback(
-        (value: string) => {
-            if (value.trim() === "") {
-                setDataSource(dictionary);
-                return;
-            }
-            let result = fuse.search(value);
-            result = result.filter(({ score }) => score ?? 1 < 0.3).sort((a, b) => (a.score ?? 0) - (b.score ?? 0));
-            // Take only ten first from the results
-            result = result.slice(0, 10);
-            setDataSource(result.map(({ item }) => item));
-        },
-        [fuse, dictionary]
-    );
+    // The displayed data is derived from the live dictionary so edits and newly loaded data are always shown
+    const dataSource = React.useMemo(() => {
+        if (searchText.trim() === "") {
+            return dictionary;
+        }
+        return (
+            fuse
+                .search(searchText)
+                .filter(({ score }) => (score ?? 1) < 0.3)
+                .sort((a, b) => (a.score ?? 0) - (b.score ?? 0))
+                // Take only ten first from the results
+                .slice(0, 10)
+                .map(({ item }) => item)
+        );
+    }, [fuse, dictionary, searchText]);
+
+    const onSearch = React.useCallback((value: string) => {
+        setSearchText(value);
+    }, []);
 
     const onLightDarkSwitchChangeEventHandler = React.useCallback((checked: boolean) => {
         setDarkMode(checked);
@@ -138,14 +144,12 @@ let App = ({ className }: Props) => {
             if (accept && addNew) {
                 dictionaryTempRef.current = undefined;
                 setKeys(fields ?? []);
-                setSelectKeysVisible(false);
                 setDictionary([]);
+                setSelectedRowKeys([]);
                 setItem("dictionary", []);
                 setItem("keys", fields ?? []);
             } else if (accept && dictionaryTempRef.current) {
                 setKeys(fields ?? []);
-                setSelectKeysVisible(false);
-                setDictionary(dictionaryTempRef.current);
                 const newDictionary = [...dictionaryTempRef.current];
                 // Select the keys which are not in the fields but exists in the keysTempRef
                 const newKeys = keysTempRef.current.filter(key => !fields?.includes(key));
@@ -159,13 +163,15 @@ let App = ({ className }: Props) => {
                     }
                 }
                 setDictionary(newDictionary);
+                setSelectedRowKeys([]);
                 setItem("dictionary", newDictionary);
                 setItem("keys", fields ?? []);
             } else {
                 dictionaryTempRef.current = undefined;
                 keysTempRef.current = [];
-                setSelectKeysVisible(false);
             }
+            setSelectKeysVisible(false);
+            setAddNew(false);
         },
         [setItem, addNew]
     );
@@ -173,11 +179,16 @@ let App = ({ className }: Props) => {
     const onAddEditRowDataPopupClose = React.useCallback(
         (accept: boolean, data?: DictionaryEntry) => {
             if (accept && data) {
-                let newDictionary = [...dictionary];
+                const newDictionary = [...dictionary];
                 if (editEntryNewMode) {
                     newDictionary.push(data);
-                } else if (editAddEntry && !editEntryNewMode) {
-                    const index = newDictionary.findIndex(f => f.id === editAddEntry.id);
+                } else {
+                    const index = editAddEntry ? newDictionary.findIndex(f => f.id === editAddEntry.id) : -1;
+                    if (index === -1) {
+                        notification("error", "The edited entry no longer exists in the dictionary.");
+                        setAddOrEditEntryVisible(false);
+                        return;
+                    }
                     newDictionary[index] = data;
                 }
                 setDictionary(newDictionary);
@@ -185,7 +196,7 @@ let App = ({ className }: Props) => {
             }
             setAddOrEditEntryVisible(false);
         },
-        [setItem, dictionary, editAddEntry, editEntryNewMode]
+        [setItem, dictionary, editAddEntry, editEntryNewMode, notification]
     );
 
     // The Antd table scroll height must be calculated dynamically as it doesn't support max-height
@@ -218,8 +229,11 @@ let App = ({ className }: Props) => {
     const editClick = React.useCallback(() => {
         if (selectedRowKeys.length > 0) {
             const lastSelectedKey = selectedRowKeys[selectedRowKeys.length - 1];
-            setEditAddEntry(dictionary.find(item => item.id === lastSelectedKey));
-
+            const entry = dictionary.find(item => item.id === lastSelectedKey);
+            if (!entry) {
+                return;
+            }
+            setEditAddEntry(entry);
             setEditEntryNewMode(false);
             setAddOrEditEntryVisible(true);
         }
@@ -229,13 +243,23 @@ let App = ({ className }: Props) => {
         setSelectedRowKeys(selectedRowKeys);
     }, []);
 
+    // Keep the selection in sync with the rows that are currently displayed
+    React.useEffect(() => {
+        setSelectedRowKeys(current => {
+            const visibleIds = new Set<Key>(dataSource.map(item => item.id));
+            const filtered = current.filter(key => visibleIds.has(key));
+            return filtered.length === current.length ? current : filtered;
+        });
+    }, [dataSource]);
+
     const rowSelection = React.useMemo(() => {
         return {
+            selectedRowKeys,
             onChange: onSelectionChange,
             columnWidth: 60,
             columnTitle: "Select",
         };
-    }, [onSelectionChange]);
+    }, [onSelectionChange, selectedRowKeys]);
 
     const showAboutClick = React.useCallback(() => {
         setAboutPopupVisible(true);
@@ -319,7 +343,7 @@ let App = ({ className }: Props) => {
                     id="table-fixed-height"
                     className="App-table"
                     columns={tableColumns}
-                    dataSource={dataSource ?? dictionary}
+                    dataSource={dataSource}
                     pagination={false}
                     virtual
                     scroll={{ y: scrollHeight }}
