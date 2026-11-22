@@ -11,4 +11,4 @@ type BaseProps = {
     className?: string;
 };
 
-export type { Dictionary, DictionaryEntry, BaseProps };
+export type { BaseProps, Dictionary, DictionaryEntry };

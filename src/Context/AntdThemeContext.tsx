@@ -76,4 +76,4 @@ const AntdThemeProvider = ({ children }: Props) => {
  */
 const useAntdTheme = () => React.useContext(ThemeContext);
 
-export { useAntdTheme, AntdThemeProvider, useToken as useAntdToken };
+export { AntdThemeProvider, useAntdTheme, useToken as useAntdToken };

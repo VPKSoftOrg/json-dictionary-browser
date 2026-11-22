@@ -29,5 +29,5 @@ const useNotify = (): [
     return [contextHolder, openNotificationWithIcon];
 };
 
-export { useNotify };
 export type { NotificationType };
+export { useNotify };
