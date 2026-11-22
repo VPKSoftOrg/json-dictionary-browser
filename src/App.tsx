@@ -23,8 +23,19 @@ import { useLocalStorage } from "./Utilities/UseLocalStorage.tsx";
 type Props = {} & BaseProps;
 
 let App = ({ className }: Props) => {
-    // Local storage
-    const [setItem, , getItem] = useLocalStorage();
+    // The area where the notifications go
+    const [contextHolder, notification] = useNotify();
+
+    // Local storage; a failed write (e.g. the storage is full) is shown to the user
+    const onStorageError = React.useCallback(
+        (operation: "read" | "write", key: string) => {
+            if (operation === "write") {
+                notification("error", `Could not save '${key}' to the browser storage. The storage may be full.`);
+            }
+        },
+        [notification]
+    );
+    const [setItem, , getItem] = useLocalStorage(onStorageError);
 
     // Antd theme selection design token
     const { token } = useAntdToken();
@@ -49,9 +60,6 @@ let App = ({ className }: Props) => {
     // Ref data not interacting with the UI
     const dictionaryTempRef = React.useRef<DictionaryEntry[] | undefined>(undefined);
     const keysTempRef = React.useRef<Array<string>>([]);
-
-    // The area where the notifications go
-    const [contextHolder, notification] = useNotify();
 
     // Download the current dictionary
     const downloadLinkClick = useDynamicDownload(dictionary);
@@ -103,6 +111,13 @@ let App = ({ className }: Props) => {
             keysTempRef.current = getArrayFields(dictionary);
             setAddNew(false);
             setSelectKeysVisible(true);
+        },
+        [notification]
+    );
+
+    const onOpenFileError = React.useCallback(
+        (message: string) => {
+            notification("error", message);
         },
         [notification]
     );
@@ -199,22 +214,35 @@ let App = ({ className }: Props) => {
         [setItem, dictionary, editAddEntry, editEntryNewMode, notification]
     );
 
-    // The Antd table scroll height must be calculated dynamically as it doesn't support max-height
-    const onResize = React.useCallback(() => {
-        const tableContainer = document.getElementById("table-container");
-        const tableHeader = document.getElementsByClassName("ant-table-header")?.[0] as HTMLElement | undefined;
-        const clientHeight = tableContainer?.clientHeight ?? 0;
-        const headerHeight = tableHeader?.offsetHeight ?? 0;
-        const totalHeight = clientHeight - headerHeight - 20;
-        setScrollHeight(totalHeight);
-    }, []);
+    // The Antd table scroll height must be calculated dynamically as it doesn't support max-height.
+    // A ResizeObserver catches every size change (window resize, toolbar wrapping, header changes).
+    const tableContainerRef = React.useRef<HTMLDivElement>(null);
 
+    // biome-ignore lint/correctness/useExhaustiveDependencies: re-observe the header when the columns (keys) change
     React.useEffect(() => {
-        globalThis.addEventListener("resize", onResize);
-        return () => {
-            globalThis.removeEventListener("resize", onResize);
+        const tableContainer = tableContainerRef.current;
+        if (!tableContainer) {
+            return;
+        }
+
+        const updateScrollHeight = () => {
+            const tableHeader = tableContainer.querySelector<HTMLElement>(".ant-table-header");
+            const headerHeight = tableHeader?.offsetHeight ?? 0;
+            setScrollHeight(Math.max(tableContainer.clientHeight - headerHeight - 20, 0));
         };
-    }, [onResize]);
+
+        const observer = new ResizeObserver(updateScrollHeight);
+        observer.observe(tableContainer);
+        const tableHeader = tableContainer.querySelector<HTMLElement>(".ant-table-header");
+        if (tableHeader) {
+            observer.observe(tableHeader);
+        }
+        updateScrollHeight();
+
+        return () => {
+            observer.disconnect();
+        };
+    }, [keys]);
 
     const addNewClick = React.useCallback(() => {
         setAddNew(true);
@@ -265,19 +293,13 @@ let App = ({ className }: Props) => {
         setAboutPopupVisible(true);
     }, []);
 
-    React.useEffect(() => {
-        const timeout = globalThis.setTimeout(onResize, 1000);
-        return () => {
-            globalThis.clearTimeout(timeout);
-        };
-    }, [onResize]);
-
     return (
         <div id="App" className={classNames(className, App.name)}>
             {contextHolder}
             <div className="App-toolbar">
                 <DragDropOpenFileAreaButton //
                     onGetFile={onGetFile}
+                    onOpenError={onOpenFileError}
                 />
                 <Input.Search //
                     id="app-toolbar-search"
@@ -338,7 +360,7 @@ let App = ({ className }: Props) => {
                     </Button>
                 </Tooltip>
             </div>
-            <div id="table-container" className="App-table-container">
+            <div id="table-container" ref={tableContainerRef} className="App-table-container">
                 <Table<DictionaryEntry> //
                     id="table-fixed-height"
                     className="App-table"
