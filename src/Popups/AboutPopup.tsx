@@ -20,6 +20,11 @@ type AboutPopupProps = {
 };
 
 const appVersion = Package.version;
+
+/** Opens an external URL in a new tab without giving it access to this window. */
+const openExternalUrl = (url: string) => {
+    globalThis.open(url, "_blank", "noopener,noreferrer");
+};
 const appName = Package.description;
 
 let AboutPopup = ({
@@ -30,17 +35,17 @@ let AboutPopup = ({
 }: AboutPopupProps) => {
     // Open my GitHub profile URL when the corresponding component is clicked.
     const openVPKSoftUrl = React.useCallback(() => {
-        void open("https://github.com/VPKSoft");
+        openExternalUrl("https://github.com/VPKSoft");
     }, []);
 
     // Open the github.com URL when the corresponding component is clicked.
     const openGitHubUrl = React.useCallback(() => {
-        void open("https://github.com/VPKSoftOrg/json-dictionary-browser");
+        openExternalUrl("https://github.com/VPKSoftOrg/json-dictionary-browser");
     }, []);
 
     // Open the latest release from the netlify.app.
     const openNetlifyUrl = React.useCallback(() => {
-        void open("https://json-dictionary-browser.netlify.app");
+        openExternalUrl("https://json-dictionary-browser.netlify.app");
     }, []);
 
     return (

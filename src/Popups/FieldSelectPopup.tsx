@@ -2,6 +2,7 @@ import { Modal, Select } from "antd";
 import classNames from "classnames";
 import * as React from "react";
 import { styled } from "styled-components";
+import { pascalCase } from "../Utilities/Misc";
 
 /**
  * The props for the {@link PreferencesPopup} component.
@@ -56,7 +57,7 @@ let FieldSelectPopup = ({
             .filter(f => f !== "id")
             .map((f, i) => (
                 <Select.Option value={f} key={i}>
-                    {`${f[0].toUpperCase()}${f.slice(1)}`}
+                    {pascalCase(f)}
                 </Select.Option>
             ));
         return result;

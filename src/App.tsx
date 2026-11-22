@@ -18,6 +18,7 @@ import { FieldSelectPopup } from "./Popups/FieldSelectPopup.tsx";
 import { PwaBadge } from "./PwaBadge.tsx";
 import type { BaseProps, DictionaryEntry } from "./Types/BaseTypes.ts";
 import { getArrayFields } from "./Utilities/ArrayUtils.ts";
+import { pascalCase } from "./Utilities/Misc.ts";
 import { useLocalStorage } from "./Utilities/UseLocalStorage.tsx";
 
 type Props = {} & BaseProps;
@@ -124,7 +125,7 @@ let App = ({ className }: Props) => {
 
     const tableColumns = React.useMemo(() => {
         return keys.map(key => ({
-            title: key[0].toUpperCase() + key.slice(1),
+            title: pascalCase(key),
             dataIndex: key,
             key: key,
         }));
@@ -318,7 +319,6 @@ let App = ({ className }: Props) => {
                     className="App-toolbar-switch"
                     checkedChildren={<FontAwesomeIcon icon={faMoon} />}
                     unCheckedChildren={<FontAwesomeIcon icon={faSun} />}
-                    defaultChecked
                     checked={darkMode}
                     onChange={onLightDarkSwitchChangeEventHandler}
                 />
