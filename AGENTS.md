@@ -2,6 +2,15 @@
 
 Guidance for AI coding agents working in this repository. See `README.md` for the project overview and `CLAUDE.md` for the commands, code style and architecture.
 
+## Git workflow
+
+Changes go to `develop` through pull requests, one branch per change:
+
+1. Before starting, check `git status`. If the repository folder has local uncommitted changes (modified, staged or untracked files, other than agent tool folders such as `.claude/`), stop and ask the user what to do with them. Otherwise switch to `develop` and update it from `origin` (`git pull --ff-only`).
+2. Create a new branch from `develop` (e.g. `feature/<short-name>` or `fix/<short-name>`).
+3. Commit the changes to that branch and push it to `origin`.
+4. Create a pull request into `develop` without asking for confirmation first.
+
 ## Before finishing a change
 
 Run `npm run build`, `npm run lint` and `npm test`; CI runs all three and each must pass. `npm run lint-fix` applies Biome's formatting and safe fixes.
