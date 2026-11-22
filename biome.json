@@ -19,11 +19,7 @@
     "linter": {
         "enabled": true,
         "rules": {
-            "nursery": {
-                "useConsistentCurlyBraces": "error",
-                "useExportsLast": "error"
-            },
-            "recommended": false,
+            "preset": "none",
             "complexity": {
                 "noExtraBooleanCast": "error",
                 "noForEach": "error",
@@ -32,7 +28,6 @@
                 "noUselessSwitchCase": "error",
                 "noUselessThisAlias": "error",
                 "noUselessTypeConstraint": "error",
-                "noWith": "error",
                 "useArrowFunction": "error",
                 "useDateNow": "error",
                 "useFlatMap": "error"
@@ -47,7 +42,6 @@
                 "noInnerDeclarations": "error",
                 "noInvalidBuiltinInstantiation": "error",
                 "noInvalidConstructorSuper": "error",
-                "noNewSymbol": "error",
                 "noNonoctalDecimalEscape": "error",
                 "noPrecisionLoss": "error",
                 "noSelfAssign": "error",
@@ -60,13 +54,13 @@
                 "noUnsafeOptionalChaining": "error",
                 "noUnusedLabels": "error",
                 "noUnusedVariables": "warn",
-                "useArrayLiterals": "off",
                 "useExhaustiveDependencies": "warn",
                 "useHookAtTopLevel": "error",
                 "useIsNan": "error",
                 "useJsxKeyInIterable": "error",
                 "useValidForDirection": "error",
-                "useYield": "error"
+                "useYield": "error",
+                "useValidTypeof": "error"
             },
             "security": {
                 "noDangerouslySetInnerHtmlWithChildren": "error"
@@ -88,7 +82,10 @@
                 "useForOf": "error",
                 "useNodejsImportProtocol": "error",
                 "useNumberNamespace": "error",
-                "useThrowNewError": "error"
+                "useThrowNewError": "error",
+                "useConsistentCurlyBraces": "error",
+                "useExportsLast": "error",
+                "useArrayLiterals": "off"
             },
             "suspicious": {
                 "noAssignInExpressions": "error",
@@ -127,7 +124,7 @@
                 "useIsArray": "error",
                 "useNamespaceKeyword": "error",
                 "useNumberToFixedDigitsArgument": "error",
-                "useValidTypeof": "error"
+                "noWith": "error"
             }
         }
     },
